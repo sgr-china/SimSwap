@@ -48,7 +48,8 @@ class fsModel(BaseModel):
             torch.backends.cudnn.benchmark = True
         self.isTrain = opt.isTrain
 
-        device = torch.device("cuda:0")
+        # device = torch.device("cuda:0")
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         if opt.crop_size == 224:
             from .fs_networks import Generator_Adain_Upsample, Discriminator
@@ -57,7 +58,7 @@ class fsModel(BaseModel):
 
         # Generator network
         self.netG = Generator_Adain_Upsample(input_nc=3, output_nc=3, latent_size=512, n_blocks=9, deep=False)
-        self.netG.to(device)
+        # self.netG.to(device)
 
         # Id network
         netArc_checkpoint = opt.Arc_path
@@ -67,6 +68,7 @@ class fsModel(BaseModel):
         self.netArc.eval()
 
         if not self.isTrain:
+            print("是否加入了预训练模型a")
             pretrained_path = '' if not self.isTrain else opt.load_pretrain
             self.load_network(self.netG, 'G', opt.which_epoch, pretrained_path)
             return
@@ -87,6 +89,7 @@ class fsModel(BaseModel):
 
         # load networks
         if opt.continue_train or opt.load_pretrain:
+            print("是否加入了预训练模型b")
             pretrained_path = '' if not self.isTrain else opt.load_pretrain
             # print (pretrained_path)
             self.load_network(self.netG, 'G', opt.which_epoch, pretrained_path)
@@ -116,6 +119,7 @@ class fsModel(BaseModel):
             # optimizer D
             params = list(self.netD1.parameters()) + list(self.netD2.parameters())
             self.optimizer_D = torch.optim.Adam(params, lr=opt.lr, betas=(opt.beta1, 0.999))
+
 
     def _gradinet_penalty_D(self, netD, img_att, img_fake):
         # interpolate sample
@@ -150,6 +154,7 @@ class fsModel(BaseModel):
 
         img_fake = self.netG.forward(img_att, latent_id)
         if not self.isTrain:
+            print("shifoujinru ")
             return img_fake
         img_fake_downsample = self.downsample(img_fake)
         img_att_downsample = self.downsample(img_att)

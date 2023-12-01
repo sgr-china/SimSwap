@@ -20,7 +20,7 @@ def _totensor(array):
     img = tensor.transpose(0, 1).transpose(0, 2).contiguous()
     return img.float().div(255)
 
-def video_swap(video_path, id_vetor,specific_person_id_nonorm,id_thres, swap_model, detect_model, save_path, temp_results_dir='./temp_results', crop_size=224, no_simswaplogo = False,use_mask =False):
+def video_swap(video_path, id_vetor,specific_person_id_nonorm,id_thres, swap_model, detect_model, save_path, temp_results_dir='./temp_results', crop_size=224, no_simswaplogo = True,use_mask =False):
     video_forcheck = VideoFileClip(video_path)
     if video_forcheck.audio is None:
         no_audio = True
@@ -34,26 +34,20 @@ def video_swap(video_path, id_vetor,specific_person_id_nonorm,id_thres, swap_mod
 
     video = cv2.VideoCapture(video_path)
     logoclass = watermark_image('./simswaplogo/simswaplogo.png')
-    ret = True
-    frame_index = 0
 
     frame_count = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
-
-    # video_WIDTH = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
-
-    # video_HEIGHT = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
     
     fps = video.get(cv2.CAP_PROP_FPS)
     if  os.path.exists(temp_results_dir):
             shutil.rmtree(temp_results_dir)
 
     spNorm =SpecificNorm()
-    mse = torch.nn.MSELoss().cuda()
-
+    # mse = torch.nn.MSELoss().cuda()
+    mse = torch.nn.MSELoss()
     if use_mask:
         n_classes = 19
         net = BiSeNet(n_classes=n_classes)
-        net.cuda()
+        # net.cuda()
         save_pth = os.path.join('./parsing_model/checkpoint', '79999_iter.pth')
         net.load_state_dict(torch.load(save_pth))
         net.eval()
@@ -64,29 +58,35 @@ def video_swap(video_path, id_vetor,specific_person_id_nonorm,id_thres, swap_mod
     for frame_index in tqdm(range(frame_count)): 
         ret, frame = video.read()
         if  ret:
+            # 使用人脸检测模型对当前帧进行人脸检测
             detect_results = detect_model.get(frame,crop_size)
 
             if detect_results is not None:
                 # print(frame_index)
                 if not os.path.exists(temp_results_dir):
                         os.mkdir(temp_results_dir)
+                "人脸图像列表"
                 frame_align_crop_list = detect_results[0]
-                frame_mat_list = detect_results[1]
 
+                "人脸对应的仿射矩阵列表"
+                frame_mat_list = detect_results[1]
+                "用于存储不同人脸与目标身份向量相似度的列表"
                 id_compare_values = [] 
                 frame_align_crop_tenor_list = []
                 for frame_align_crop in frame_align_crop_list:
 
-                    # BGR TO RGB
-                    # frame_align_crop_RGB = frame_align_crop[...,::-1]
-
-                    frame_align_crop_tenor = _totensor(cv2.cvtColor(frame_align_crop,cv2.COLOR_BGR2RGB))[None,...].cuda()
-
+                    # frame_align_crop_tenor = _totensor(cv2.cvtColor(frame_align_crop,cv2.COLOR_BGR2RGB))[None,...].cuda()
+                    "将裁剪后的人脸图像转换为 PyTorch 张量"
+                    frame_align_crop_tenor = _totensor(cv2.cvtColor(frame_align_crop, cv2.COLOR_BGR2RGB))[None, ...]
+                    "对裁剪后的人脸进行特定规范化"
                     frame_align_crop_tenor_arcnorm = spNorm(frame_align_crop_tenor)
+                    "对特定规范化后的人脸图像进行下采样"
                     frame_align_crop_tenor_arcnorm_downsample = F.interpolate(frame_align_crop_tenor_arcnorm, size=(112,112))
+                    "使用 ArcFace 模型获取裁剪后的人脸的身份特征"
                     frame_align_crop_crop_id_nonorm = swap_model.netArc(frame_align_crop_tenor_arcnorm_downsample)
-
-                    id_compare_values.append(mse(frame_align_crop_crop_id_nonorm,specific_person_id_nonorm).detach().cpu().numpy())
+                    "计算当前人脸与目标身份向量的相似度，并将结果添加到列表中"
+                    id_compare_values.append(mse(frame_align_crop_crop_id_nonorm, specific_person_id_nonorm).detach().cpu().numpy())
+                    "将当前裁剪后的人脸图像添加到列表中"
                     frame_align_crop_tenor_list.append(frame_align_crop_tenor)
                 id_compare_values_array = np.array(id_compare_values)
                 min_index = np.argmin(id_compare_values_array)

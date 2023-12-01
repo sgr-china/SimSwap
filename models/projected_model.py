@@ -30,6 +30,7 @@ def compute_grad2(d_out, x_in):
     reg = grad_dout2.view(batch_size, -1).sum(1)
     return reg
 
+
 class fsModel(BaseModel):
     def name(self):
         return 'fsModel'

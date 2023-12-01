@@ -104,8 +104,8 @@ class TrainOptions:
 
 if __name__ == '__main__':
 
-    opt         = TrainOptions().parse()
-    iter_path   = os.path.join(opt.checkpoints_dir, opt.name, 'iter.txt')
+    opt = TrainOptions().parse()
+    iter_path = os.path.join(opt.checkpoints_dir, opt.name, 'iter.txt')
 
     sample_path = os.path.join(opt.checkpoints_dir, opt.name, 'samples')
 
@@ -119,7 +119,7 @@ if __name__ == '__main__':
 
     if opt.continue_train:
         try:
-            start_epoch, epoch_iter = np.loadtxt(iter_path , delimiter=',', dtype=int)
+            start_epoch, epoch_iter = np.loadtxt(iter_path, delimiter=',', dtype=int)
         except:
             start_epoch, epoch_iter = 1, 0
         print('Resuming from epoch %d at iteration %d' % (start_epoch, epoch_iter))        
@@ -129,10 +129,7 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = str(opt.gpu_ids)
     print("GPU used : ", str(opt.gpu_ids))
 
-    
     cudnn.benchmark = True
-
-    
 
     model = fsModel()
 
@@ -140,8 +137,8 @@ if __name__ == '__main__':
 
     #####################################################
     if opt.use_tensorboard:
-        tensorboard_writer  = tensorboard.SummaryWriter(log_path)
-        logger              = tensorboard_writer
+        tensorboard_writer = tensorboard.SummaryWriter(log_path)
+        logger = tensorboard_writer
         
     log_name = os.path.join(opt.checkpoints_dir, opt.name, 'loss_log.txt')
 
@@ -151,12 +148,12 @@ if __name__ == '__main__':
 
     optimizer_G, optimizer_D = model.optimizer_G, model.optimizer_D
 
-    loss_avg        = 0
-    refresh_count   = 0
-    imagenet_std    = torch.Tensor([0.229, 0.224, 0.225]).view(3,1,1)
-    imagenet_mean   = torch.Tensor([0.485, 0.456, 0.406]).view(3,1,1)
+    loss_avg = 0
+    refresh_count = 0
+    imagenet_std = torch.Tensor([0.229, 0.224, 0.225]).view(3,1,1)
+    imagenet_mean = torch.Tensor([0.485, 0.456, 0.406]).view(3,1,1)
 
-    train_loader    = GetLoader(opt.dataset,opt.batchSize,8,1234)
+    train_loader = GetLoader(opt.dataset, opt.batchSize, 8, 1234)
 
     randindex = [i for i in range(opt.batchSize)]
     random.shuffle(randindex)
@@ -186,35 +183,53 @@ if __name__ == '__main__':
                 img_id = src_image2[randindex]
 
             img_id_112      = F.interpolate(img_id,size=(112,112), mode='bicubic')
+            "通过 ArcFace 模型获取 ID 图像的特征向量"
             latent_id       = model.netArc(img_id_112)
             latent_id       = F.normalize(latent_id, p=2, dim=1)
+            "更新判别器"
             if interval:
-                
+                "使用生成器生成图片"
                 img_fake        = model.netG(src_image1, latent_id)
+                "获取生成器生成图像的判别器输出"
                 gen_logits,_    = model.netD(img_fake.detach(), None)
+                "计算生成器生成图像的判别器损失"
                 loss_Dgen       = (F.relu(torch.ones_like(gen_logits) + gen_logits)).mean()
-
+                "获取真实图像的判别器输出"
                 real_logits,_   = model.netD(src_image2,None)
+                "计算真实图像的判别器损失"
                 loss_Dreal      = (F.relu(torch.ones_like(real_logits) - real_logits)).mean()
-
+                "判别器总损失"
                 loss_D          = loss_Dgen + loss_Dreal
                 optimizer_D.zero_grad()
                 loss_D.backward()
                 optimizer_D.step()
+
             else:
-                
-                # model.netD.requires_grad_(True)
+                "更新生成器 "
+                "使用生成器生成图片"
                 img_fake        = model.netG(src_image1, latent_id)
-                # G loss
+                # G loss 获取生成器生成图像的判别器输出和特征
                 gen_logits,feat = model.netD(img_fake, None)
-                
+                "生成器主要损失，即生成器欺骗判别器的损失"
                 loss_Gmain      = (-gen_logits).mean()
+                "插值生成的图像到 112x112 大小"
                 img_fake_down   = F.interpolate(img_fake, size=(112,112), mode='bicubic')
+
+                "获取生成器生成图像的特征向量"
                 latent_fake     = model.netArc(img_fake_down)
+                "对特征向量进行 L2 归一化"
                 latent_fake     = F.normalize(latent_fake, p=2, dim=1)
+
+                " ID 损失，即生成的图像特征向量与原图 ID 特征向量的余弦相似度损失。"
                 loss_G_ID       = (1 - model.cosin_metric(latent_fake, latent_id)).mean()
+
+                "获取真实图像的特征"
                 real_feat       = model.netD.get_feature(src_image1)
-                feat_match_loss = model.criterionFeat(feat["3"],real_feat["3"]) 
+
+                "特征匹配损失，即生成器生成图像的某一层特征与真实图像对应层特征的损失"
+                feat_match_loss = model.criterionFeat(feat["3"], real_feat["3"])
+
+                "生成器总损失，包括欺骗判别器损失、ID 损失和特征匹配损失"
                 loss_G          = loss_Gmain + loss_G_ID * opt.lambda_id + feat_match_loss * opt.lambda_feat
                 
 

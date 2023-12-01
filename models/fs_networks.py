@@ -38,6 +38,7 @@ class ApplyStyle(nn.Module):
         x = x * (style[:, 0] * 1 + 1.) + style[:, 1] * 1
         return x
 
+
 class ResnetBlock_Adain(nn.Module):
     def __init__(self, dim, latent_size, padding_type, activation=nn.ReLU(True)):
         super(ResnetBlock_Adain, self).__init__()
@@ -52,7 +53,7 @@ class ResnetBlock_Adain(nn.Module):
             p = 1
         else:
             raise NotImplementedError('padding [%s] is not implemented' % padding_type)
-        conv1 += [nn.Conv2d(dim, dim, kernel_size=3, padding = p), InstanceNorm()]
+        conv1 += [nn.Conv2d(dim, dim, kernel_size=3, padding = p), nn.InstanceNorm2d(dim)]
         self.conv1 = nn.Sequential(*conv1)
         self.style1 = ApplyStyle(latent_size, dim)
         self.act1 = activation
@@ -67,7 +68,7 @@ class ResnetBlock_Adain(nn.Module):
             p = 1
         else:
             raise NotImplementedError('padding [%s] is not implemented' % padding_type)
-        conv2 += [nn.Conv2d(dim, dim, kernel_size=3, padding=p), InstanceNorm()]
+        conv2 += [nn.Conv2d(dim, dim, kernel_size=3, padding=p), nn.InstanceNorm2d(dim)]
         self.conv2 = nn.Sequential(*conv2)
         self.style2 = ApplyStyle(latent_size, dim)
 
@@ -105,7 +106,7 @@ class Generator_Adain_Upsample(nn.Module):
             self.down4 = nn.Sequential(nn.Conv2d(512, 512, kernel_size=3, stride=2, padding=1),
                                        norm_layer(512), activation)
 
-        ### resnet blocks
+        ### resnet blocks 进行特征提取和转换。
         BN = []
         for i in range(n_blocks):
             BN += [

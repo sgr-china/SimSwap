@@ -41,7 +41,6 @@ transformer_Arcface = transforms.Compose([
 if __name__ == '__main__':
     opt = TestOptions().parse()
     pic_specific = opt.pic_specific_path
-    start_epoch, epoch_iter = 1, 0
     crop_size = opt.crop_size
 
     torch.nn.Module.dump_patches = True
@@ -53,6 +52,7 @@ if __name__ == '__main__':
         mode = 'None'
     model = create_model(opt)
     model.eval()
+    print(model)
 
 
     app = Face_detect_crop(name='antelope', root='./insightface_func/models')
@@ -74,7 +74,7 @@ if __name__ == '__main__':
         # img_att = img_b.view(-1, img_b.shape[0], img_b.shape[1], img_b.shape[2])
 
         # convert numpy to tensor
-        img_id = img_id.cuda()
+        # img_id = img_id.cuda()
         # img_att = img_att.cuda()
 
         #create latent id
@@ -85,11 +85,11 @@ if __name__ == '__main__':
 
         # The specific person to be swapped
         specific_person_whole = cv2.imread(pic_specific)
-        specific_person_align_crop, _ = app.get(specific_person_whole,crop_size)
+        specific_person_align_crop, _ = app.get(specific_person_whole, crop_size)
         specific_person_align_crop_pil = Image.fromarray(cv2.cvtColor(specific_person_align_crop[0],cv2.COLOR_BGR2RGB)) 
         specific_person = transformer_Arcface(specific_person_align_crop_pil)
         specific_person = specific_person.view(-1, specific_person.shape[0], specific_person.shape[1], specific_person.shape[2])
-        specific_person = specific_person.cuda()
+        # specific_person = specific_person.cuda()
         specific_person_downsample = F.interpolate(specific_person, size=(112,112))
         specific_person_id_nonorm = model.netArc(specific_person_downsample)
 

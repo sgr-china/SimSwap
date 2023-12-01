@@ -9,18 +9,28 @@ from pg_modules.diffaug import DiffAugment
 
 
 class SingleDisc(nn.Module):
+    """
+    nc：输入图像的通道数。
+    ndf：鉴别器中的过滤器数量。
+    start_sz：输入图像的大小。
+    end_sz：最终输出图像的大小。
+    head：布尔值，指示是否包含鉴别器的头部（一些初始卷积层）。
+    separable：布尔值，指示是否使用可分离卷积。
+    patch：布尔值，指示是否使用补丁级别的下采样。
+    """
     def __init__(self, nc=None, ndf=None, start_sz=256, end_sz=8, head=None, separable=False, patch=False):
         super().__init__()
+        "定义了输入图像大小与通道数的对应关系的字典"
         channel_dict = {4: 512, 8: 512, 16: 256, 32: 128, 64: 64, 128: 64,
                         256: 32, 512: 16, 1024: 8}
 
-        # interpolate for start sz that are not powers of two
+        # interpolate for start sz that are not powers of two 如果给定的 start_sz 不在 channel_dict 中，将其插值为最接近的大小
         if start_sz not in channel_dict.keys():
             sizes = np.array(list(channel_dict.keys()))
             start_sz = sizes[np.argmin(abs(sizes - start_sz))]
         self.start_sz = start_sz
 
-        # if given ndf, allocate all layers with the same ndf
+        # if given ndf, allocate all layers with the same ndf 如果没有指定 ndf，则为每个图像大小分配相同数量的过滤器
         if ndf is None:
             nfc = channel_dict
         else:
@@ -33,17 +43,18 @@ class SingleDisc(nn.Module):
 
         layers = []
 
-        # Head if the initial input is the full modality
+        # Head if the initial input is the full modality 如果包含头部，则添加一些卷积和激活层。
         if head:
             layers += [conv2d(nc, nfc[256], 3, 1, 1, bias=False),
                        nn.LeakyReLU(0.2, inplace=True)]
 
-        # Down Blocks
+        # Down Blocks 根据是否使用补丁级别的下采样，选择不同的下采样块类型
         DB = partial(DownBlockPatch, separable=separable) if patch else partial(DownBlock, separable=separable)
+        "使用循环向下添加下采样块"
         while start_sz > end_sz:
             layers.append(DB(nfc[start_sz],  nfc[start_sz//2]))
             start_sz = start_sz // 2
-
+        "添加最终的卷积层，得到二进制分类输出"
         layers.append(conv2d(nfc[end_sz], 1, 4, 1, 0, bias=False))
         self.main = nn.Sequential(*layers)
 
